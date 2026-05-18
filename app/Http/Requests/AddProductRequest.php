@@ -26,6 +26,7 @@ class AddProductRequest extends FormRequest
             'wrap_price' => 'nullable|numeric|min:0',
             'glossy_price' => 'nullable|numeric|min:0',
             'hologram_price' => 'nullable|numeric|min:0',
+            'is_customizable' => 'nullable|boolean',
         ];
     }
 }

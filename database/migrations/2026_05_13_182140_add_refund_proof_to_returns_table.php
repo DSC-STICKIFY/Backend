@@ -12,6 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('returns_refunds', function (Blueprint $table) {
+            if (!Schema::hasColumn('returns_refunds', 'gcash_number')) {
+                $table->string('gcash_number')->nullable()->after('status');
+            }
             $table->string('refund_proof')->nullable()->after('gcash_number');
             $table->timestamp('refund_completed_at')->nullable()->after('refund_proof');
             $table->string('paymongo_refund_id')->nullable()->after('refund_completed_at');

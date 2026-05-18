@@ -25,6 +25,7 @@ class ProductsModel extends Model
         'product_description',
         'is_car_service',
         'is_motor_service',
+        'is_customizable',
     ];
 
         public function reviews()
