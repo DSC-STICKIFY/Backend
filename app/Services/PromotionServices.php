@@ -13,8 +13,8 @@ use App\Jobs\SendPromotionEmail;
 class PromotionServices
 {
     private const TYPES_BY_CATEGORY = [
-        "Stickers"         => ["Hologram Sticker","Glossy Sticker","Matte Sticker","Die-Cut Sticker","Transparent Sticker","Assorted"],
-        "Decals & Wrap"    => ["Car Wrap","Motorbike Decal","Full Wrap","Partial Wrap","Window Decal"],
+        "Stickers"         => ["Hologram","Glossy","Matte","Transparent","Glitter","Scratch","Cut out","Visor","Assorted","Hologram Sticker","Glossy Sticker","Matte Sticker","Die-Cut Sticker","Transparent Sticker"],
+        "Decals & Wrap"    => ["Car Service Layout","Motor Service Layout","Car Wrap","Motorbike Decal","Full Wrap","Partial Wrap","Window Decal"],
         "Signage"          => ["Acrylic Signage","Neon Lights Signage","Panaflex Signage"],
         "Giveaways"        => ["Keychain","ID Lace","T-Shirt","Calling Cards","Caps","Mugs","Tarpulin","Sintra Board"],
         "Printing"         => ["Flyers","Brochures","Business Cards","Posters","Banners"],
@@ -61,8 +61,28 @@ class PromotionServices
             'created_at'     => $promo->created_at,
             'applicable_to'  => $this->getApplicableType($promo),
             'applicable_ids' => $this->getApplicableIds($promo),
+            'product_uuids'  => $this->getPromoProductUuids($promo),
             'promo_image'    => $this->resolvePromoImage($promo),
         ];
+    }
+
+    private function getPromoProductUuids($promo): array
+    {
+        if ($promo->products->isNotEmpty()) {
+            return $promo->products->pluck('uuid')->toArray();
+        }
+
+        if ($promo->types->isNotEmpty()) {
+            $typeNames = $promo->types->pluck('type_name')->toArray();
+            return \App\Models\ProductsModel::whereIn('product_type', $typeNames)->pluck('uuid')->toArray();
+        }
+
+        if ($promo->categories->isNotEmpty()) {
+            $categoryNames = $promo->categories->pluck('category_name')->toArray();
+            return \App\Models\ProductsModel::whereIn('product_category', $categoryNames)->pluck('uuid')->toArray();
+        }
+
+        return [];
     }
 
     private function resolvePromoImage($promo): ?string

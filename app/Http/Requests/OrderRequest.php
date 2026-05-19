@@ -41,6 +41,8 @@ class OrderRequest extends FormRequest
             'items.*.comments'        => 'nullable|string|max:500',
             'items.*.category'        => 'nullable|string|max:255',
             'items.*.type'            => 'nullable|string|max:255',
+            'items.*.design_name'     => 'nullable|string|max:255',
+            'items.*.quality_name'    => 'nullable|string|max:255',
             // 'items.*.pieces'       => 'nullable|integer',
             'items.*.order_image'     => 'nullable|file|image|max:2048',
         ];

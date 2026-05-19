@@ -18,6 +18,7 @@ class UserModel extends Authenticatable implements \Illuminate\Contracts\Auth\Mu
     protected $primaryKey = 'user_id';
 
     protected $fillable = [
+        'uuid',
         'first_name',
         'middle_name',
         'last_name',
@@ -35,6 +36,15 @@ class UserModel extends Authenticatable implements \Illuminate\Contracts\Auth\Mu
         'profile_image',
         'is_bot_active',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($user) {
+            if (empty($user->uuid)) {
+                $user->uuid = (string) \Illuminate\Support\Str::uuid();
+            }
+        });
+    }
 
     protected $hidden = ['password'];
     

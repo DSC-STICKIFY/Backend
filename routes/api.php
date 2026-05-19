@@ -163,6 +163,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/add_product', [ProductsModelController::class, 'addProduct']);
     Route::patch('/update_product/{id}', [ProductsModelController::class, 'updateProduct']);
     Route::delete('/delete_product/{id}', [ProductsModelController::class, 'deleteProduct']);
+
+    // Variations
+    Route::post('/products/{product}/designs', [ProductsModelController::class, 'addDesign']);
+    Route::delete('/products/designs/{id}', [ProductsModelController::class, 'removeDesign']);
+    Route::post('/products/{product}/qualities', [ProductsModelController::class, 'addQuality']);
+    Route::delete('/products/qualities/{id}', [ProductsModelController::class, 'removeQuality']);
+    Route::post('/products/{product}/sizes', [ProductsModelController::class, 'addSize']);
+    Route::delete('/products/sizes/{id}', [ProductsModelController::class, 'removeSize']);
 });
 
 // ServicePayment Routes

@@ -20,6 +20,8 @@ class OrderDetails extends Model
         'subtotal',
         'status',
         'has_review',
+        'design_name',
+        'quality_name',
     ];
 
     protected $casts = [

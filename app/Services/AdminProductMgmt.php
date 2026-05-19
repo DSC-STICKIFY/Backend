@@ -42,8 +42,35 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
             }
         }
 
+        $designs = $product->designs ? $product->designs->map(function ($d) {
+            return [
+                'id' => $d->id,
+                'design_name' => $d->design_name,
+                'design_image' => $d->design_image ? asset('storage/' . $d->design_image) : null,
+                'additional_price' => (float) $d->additional_price,
+            ];
+        }) : [];
+
+        $qualities = $product->qualities ? $product->qualities->map(function ($q) {
+            return [
+                'id' => $q->id,
+                'quality_name' => $q->quality_name,
+                'description' => $q->description,
+                'additional_price' => (float) $q->additional_price,
+            ];
+        }) : [];
+
+        $sizes = $product->sizes ? $product->sizes->map(function ($s) {
+            return [
+                'id' => $s->id,
+                'size_name' => $s->size_name,
+                'additional_price' => (float) $s->additional_price,
+            ];
+        }) : [];
+
         return [
             'product_id' => $product->product_id,
+            'uuid' => $product->uuid,
             'product_name' => $product->product_name,
             'product_price' => $originalPrice,
             'discounted_price' => $bestPrice < $originalPrice ? $bestPrice : null,
@@ -60,6 +87,9 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
             'is_motor_service' => (bool) $product->is_motor_service,
             'is_customizable' => (bool) $product->is_customizable,
             'created_at' => $product->created_at,
+            'designs' => $designs,
+            'qualities' => $qualities,
+            'sizes' => $sizes,
         ];
     }
 
@@ -164,7 +194,7 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
 
     public function getAllproducts()
     {
-        $products = ProductsModel::all();
+        $products = ProductsModel::with(['designs', 'qualities', 'sizes'])->get();
 
         $formatted = collect($products)->map(fn($p) => $this->transformProduct($p));
 
@@ -173,7 +203,7 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
 
     public function viewProductDetails(int $id)
     {
-        $product = ProductsModel::find($id);
+        $product = ProductsModel::with(['designs', 'qualities', 'sizes'])->find($id);
 
         if (!$product) {
             return response()->json(['message' => 'Product not found'], 404);
@@ -186,10 +216,83 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
 
     public function getProductsByCategory(string $category)
     {
-        $products = ProductsModel::where('product_category', $category)->get();
+        $products = ProductsModel::with(['designs', 'qualities', 'sizes'])->where('product_category', $category)->get();
 
         $formatted = $products->map(fn($p) => $this->transformProduct($p));
 
         return response()->json(['data' => $formatted]);
+    }
+    public function addDesign(int $productId, array $data)
+    {
+        $product = ProductsModel::find($productId);
+        if (!$product) return response()->json(['message' => 'Product not found'], 404);
+
+        if (isset($data['design_image'])) {
+            $file = $data['design_image'];
+            $filename = uniqid('design_') . '.webp';
+            $manager = new ImageManager(new Driver());
+            $image = $manager->decode($file);
+            $image->scaleDown(width: 600);
+            $encoded = $image->encode(new WebpEncoder(80));
+            Storage::disk('public')->put('products/designs/' . $filename, (string) $encoded);
+            $data['design_image'] = 'products/designs/' . $filename;
+        }
+
+        $design = $product->designs()->create($data);
+        return response()->json(['message' => 'Design added', 'data' => [
+            'id' => $design->id,
+            'design_name' => $design->design_name,
+            'design_image' => $design->design_image ? asset('storage/' . $design->design_image) : null,
+            'additional_price' => (float) $design->additional_price,
+        ]]);
+    }
+
+    public function removeDesign(int $id)
+    {
+        $design = \App\Models\ProductDesign::find($id);
+        if ($design) {
+            if ($design->design_image) Storage::disk('public')->delete($design->design_image);
+            $design->delete();
+        }
+        return response()->json(['message' => 'Design removed']);
+    }
+
+    public function addQuality(int $productId, array $data)
+    {
+        $product = ProductsModel::find($productId);
+        if (!$product) return response()->json(['message' => 'Product not found'], 404);
+
+        $quality = $product->qualities()->create($data);
+        return response()->json(['message' => 'Quality added', 'data' => [
+            'id' => $quality->id,
+            'quality_name' => $quality->quality_name,
+            'description' => $quality->description,
+            'additional_price' => (float) $quality->additional_price,
+        ]]);
+    }
+
+    public function removeQuality(int $id)
+    {
+        \App\Models\ProductQuality::where('id', $id)->delete();
+        return response()->json(['message' => 'Quality removed']);
+    }
+
+    public function addSize(int $productId, array $data)
+    {
+        $product = ProductsModel::find($productId);
+        if (!$product) return response()->json(['message' => 'Product not found'], 404);
+
+        $size = $product->sizes()->create($data);
+        return response()->json(['message' => 'Size added', 'data' => [
+            'id' => $size->id,
+            'size_name' => $size->size_name,
+            'additional_price' => (float) $size->additional_price,
+        ]]);
+    }
+
+    public function removeSize(int $id)
+    {
+        \App\Models\ProductSize::where('id', $id)->delete();
+        return response()->json(['message' => 'Size removed']);
     }
 }

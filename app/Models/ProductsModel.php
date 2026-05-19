@@ -13,6 +13,7 @@ class ProductsModel extends Model
     protected $primaryKey = 'product_id';
 
     protected $fillable = [
+        'uuid',
         'product_name',
         'product_price',
         'product_category',
@@ -28,8 +29,32 @@ class ProductsModel extends Model
         'is_customizable',
     ];
 
-        public function reviews()
+    protected static function booted()
+    {
+        static::creating(function ($product) {
+            if (empty($product->uuid)) {
+                $product->uuid = (string) \Illuminate\Support\Str::uuid();
+            }
+        });
+    }
+
+    public function reviews()
     {
         return $this->hasMany(Review::class);
+    }
+
+    public function designs()
+    {
+        return $this->hasMany(ProductDesign::class, 'product_id', 'product_id');
+    }
+
+    public function qualities()
+    {
+        return $this->hasMany(ProductQuality::class, 'product_id', 'product_id');
+    }
+
+    public function sizes()
+    {
+        return $this->hasMany(ProductSize::class, 'product_id', 'product_id');
     }
 }

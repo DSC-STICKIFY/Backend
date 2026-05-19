@@ -98,14 +98,24 @@ class InquiryController extends Controller
         
         $inquiry->save();
 
-        // Notify the customer if linked to a user
-        if ($inquiry->user) {
-            $inquiry->user->notify(new InquiryStatusUpdated($inquiry));
+        // Notify the customer on meaningful status transitions only.
+        // 'pending' and 'reviewed' are internal admin states — no email needed.
+        $notifiableStatuses = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'rejected'];
+
+        if (in_array($inquiry->status, $notifiableStatuses)) {
+            if ($inquiry->user) {
+                // Logged-in user: use Laravel notification system
+                $inquiry->user->notify(new InquiryStatusUpdated($inquiry));
+            } elseif ($inquiry->email) {
+                // Guest inquiry: send directly via On-Demand notification
+                \Illuminate\Support\Facades\Notification::route('mail', $inquiry->email)
+                    ->notify(new InquiryStatusUpdated($inquiry));
+            }
         }
 
         return response()->json([
             'message' => 'Inquiry status updated successfully',
-            'data' => $inquiry
+            'data'    => $inquiry
         ]);
     }
 }

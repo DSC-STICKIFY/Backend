@@ -56,4 +56,48 @@ class ProductsModelController extends Controller
     {
         return $this->service->getProductsByCategory($category);
     }
+
+    public function addDesign(\Illuminate\Http\Request $request, $id)
+    {
+        $data = $request->validate([
+            'design_name' => 'required|string',
+            'design_image' => 'nullable|image',
+            'additional_price' => 'nullable|numeric'
+        ]);
+        return $this->service->addDesign((int) $id, $data);
+    }
+
+    public function removeDesign($id)
+    {
+        return $this->service->removeDesign((int) $id);
+    }
+
+    public function addQuality(\Illuminate\Http\Request $request, $id)
+    {
+        $data = $request->validate([
+            'quality_name' => 'required|string',
+            'description' => 'nullable|string',
+            'additional_price' => 'nullable|numeric'
+        ]);
+        return $this->service->addQuality((int) $id, $data);
+    }
+
+    public function removeQuality($id)
+    {
+        return $this->service->removeQuality((int) $id);
+    }
+
+    public function addSize(\Illuminate\Http\Request $request, $id)
+    {
+        $data = $request->validate([
+            'size_name' => 'required|string',
+            'additional_price' => 'nullable|numeric'
+        ]);
+        return $this->service->addSize((int) $id, $data);
+    }
+
+    public function removeSize($id)
+    {
+        return $this->service->removeSize((int) $id);
+    }
 }

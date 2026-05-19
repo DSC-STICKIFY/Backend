@@ -54,6 +54,32 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             }
         }
 
+        $designs = $product->designs ? $product->designs->map(function ($d) {
+            return [
+                'id' => $d->id,
+                'design_name' => $d->design_name,
+                'design_image' => $d->design_image ? asset('storage/' . $d->design_image) : null,
+                'additional_price' => (float) $d->additional_price,
+            ];
+        }) : [];
+
+        $qualities = $product->qualities ? $product->qualities->map(function ($q) {
+            return [
+                'id' => $q->id,
+                'quality_name' => $q->quality_name,
+                'description' => $q->description,
+                'additional_price' => (float) $q->additional_price,
+            ];
+        }) : [];
+
+        $sizes = $product->sizes ? $product->sizes->map(function ($s) {
+            return [
+                'id' => $s->id,
+                'size_name' => $s->size_name,
+                'additional_price' => (float) $s->additional_price,
+            ];
+        }) : [];
+
         return [
             'product_id' => $product->product_id,
             'product_name' => $product->product_name,
@@ -68,7 +94,11 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             'product_category' => $product->product_category,
             'product_type' => $product->product_type,
             'is_active' => $product->is_active,
+            'is_customizable' => $product->is_customizable,
             'created_at' => $product->created_at,
+            'designs' => $designs,
+            'qualities' => $qualities,
+            'sizes' => $sizes,
         ];
     }
 
@@ -98,6 +128,8 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                     'size' => $item['size'] ?? null,
                     'comments' => $item['comments'] ?? null,
                     'status' => 'Pending',
+                    'design_name' => $item['design_name'] ?? null,
+                    'quality_name' => $item['quality_name'] ?? null,
                 ]);
             }
 
@@ -154,7 +186,7 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
      */
     public function getUserOrders(int $userId): array
     {
-        $orders = OrdersModel::with(['orderDetails.product', 'reviews', 'returnRefund', 'artist'])
+        $orders = OrdersModel::with(['orderDetails.product.designs', 'reviews', 'returnRefund', 'artist'])
             ->where('user_id', $userId)
             ->orderBy('created_at', 'DESC')
             ->get();
@@ -209,6 +241,15 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                     }
                 }
 
+                $productImage = null;
+                if (!empty($item['design_name']) && $item['design_name'] !== 'Custom Design' && $product && clone $product->designs) {
+                    $matchedDesign = $product->designs->firstWhere('design_name', $item['design_name']);
+                    if ($matchedDesign && $matchedDesign->design_image) {
+                        $productImage = asset('storage/' . $matchedDesign->design_image);
+                    }
+                }
+
+                $item['product_image']         = $productImage;
                 $item['return_window_seconds'] = $windowSeconds;
                 $item['return_deadline']       = $returnDeadline;
                 $item['return_status']         = $returnStatusMap[$item['order_details_id']] ?? null;
@@ -239,7 +280,7 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
         }
 
         $orders = OrdersModel::with([
-            'orderDetails.product',
+            'orderDetails.product.designs',
             'user',
             'reviews',
             'returnRefund'
@@ -271,13 +312,22 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             $items = $order->orderDetails
                 ->filter(fn($detail) => ($detail->status ?? $order->status) !== 'Cancelled')
                 ->map(function ($detail) use ($order, $returnStatusMap) {
+                    $productImage = null;
+                    if ($detail->design_name && $detail->design_name !== 'Custom Design' && $detail->product && $detail->product->designs) {
+                        $matchedDesign = $detail->product->designs->firstWhere('design_name', $detail->design_name);
+                        if ($matchedDesign && $matchedDesign->design_image) {
+                            $productImage = asset('storage/' . $matchedDesign->design_image);
+                        }
+                    }
+                    if (!$productImage && $detail->product?->product_image) {
+                        $productImage = asset('storage/' . $detail->product->product_image);
+                    }
+
                     return [
                         'order_details_id' => $detail->order_details_id,
                         'product_id'       => $detail->product_id,
                         'product_name'     => $detail->product?->product_name ?? 'Unknown',
-                        'product_image'    => $detail->product?->product_image
-                            ? asset('storage/' . $detail->product->product_image)
-                            : null,
+                        'product_image'    => $productImage,
                         'product_category' => $detail->product?->product_category,
                         'product_type'     => $detail->product?->product_type,
                         'quantity'         => $detail->quantity,
@@ -496,7 +546,8 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
      */
     public function getAllProducts(): array
     {
-        $products = ProductsModel::where('is_active', 1)
+        $products = ProductsModel::with(['designs', 'qualities', 'sizes'])
+            ->where('is_active', 1)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -517,7 +568,7 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
      */
     public function viewProductDetails(int $id): array
     {
-        $product = ProductsModel::find($id);
+        $product = ProductsModel::with(['designs', 'qualities', 'sizes'])->find($id);
 
         if (!$product) {
             throw new \Exception('Product not found', 404);
