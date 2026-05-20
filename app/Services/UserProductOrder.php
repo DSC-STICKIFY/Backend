@@ -357,6 +357,7 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                 'total_price'          => $activeTotal,
                 'original_total'       => $order->total_price,
                 'status'               => $order->status,
+                'cancel_reason'        => $order->cancel_reason,
                 'payment_method'       => $order->payment_method,
                 'courier'              => $order->courier,
                 'contact_number'       => $order->contact_number,
@@ -412,14 +413,28 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                     throw new \Exception('Item is already cancelled.');
                 }
 
+                $originalTotalPrice = floatval($order->total_price);
+                $currentSubtotalBeforeCancel = $order->orderDetails()
+                    ->where('status', '!=', 'Cancelled')
+                    ->sum('subtotal');
+                $shippingFee = max(0, $originalTotalPrice - $currentSubtotalBeforeCancel);
+
                 $item->update(['status' => 'Cancelled']);
 
                 $activeItems = $order->orderDetails()
                     ->where('status', '!=', 'Cancelled')
                     ->get();
 
-                $newTotal = $activeItems->sum('subtotal');
-                $order->update(['total_price' => $newTotal]);
+                $activeTotal = $activeItems->sum('subtotal');
+
+                if ($activeTotal > 0) {
+                    $newTotal = $activeTotal + $shippingFee;
+                    $order->update(['total_price' => $newTotal]);
+                } else {
+                    $allSubtotal = $order->orderDetails()->sum('subtotal');
+                    $restoreTotalPrice = $allSubtotal + $shippingFee;
+                    $order->update(['total_price' => $restoreTotalPrice]);
+                }
 
                 $totalItems = $order->orderDetails()->count();
                 $cancelledItems = $order->orderDetails()

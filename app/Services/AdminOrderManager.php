@@ -8,8 +8,8 @@ use App\Models\OrderDetails;
 use App\Models\OrdersPayment;
 use App\Models\ReturnRefund;
 use App\Models\ReturnRefundModel;
-use App\Models\UserModel;
 use Illuminate\Http\JsonResponse;
+use App\Notifications\OrderCancelled;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -277,25 +277,33 @@ class AdminOrderManager implements AdminOrderServices
     private function syncParentOrderStatus(int $orderId): void
     {
         $order = OrdersModel::with('orderDetails')->find($orderId);
-        if (!$order)
+        if (!$order) {
             return;
+        }
 
         $statuses = $order->orderDetails->pluck('status')->unique()->values();
 
         if ($statuses->count() === 1) {
-            $order->update(['status' => $statuses->first()]);
+            $order->update(['status' => $statuses->first() ?? 'Pending']);
             return;
         }
 
-        $hasRefunded = $statuses->contains('Refunded');
-        $hasActive = $statuses->contains(fn($s) => !in_array($s, ['Refunded', 'Cancelled']));
+        $hasRefunded = $statuses->contains('Refunded') || $statuses->contains('Return/Refund');
+        
+        $activeItems = $order->orderDetails->filter(function ($item) {
+            return !in_array($item->status, ['Refunded', 'Cancelled', 'Return/Refund']);
+        });
+        $hasActive = $activeItems->isNotEmpty();
 
         if ($hasRefunded && $hasActive) {
             $order->update(['status' => 'Return/Refund']);
         } elseif ($hasRefunded && !$hasActive) {
             $order->update(['status' => 'Cancelled']);
+        } elseif ($hasActive) {
+            $activeStatus = $activeItems->pluck('status')->filter()->first() ?? 'Pending';
+            $order->update(['status' => $activeStatus]);
         } else {
-            $order->update(['status' => 'Return/Refund']);
+            $order->update(['status' => 'Cancelled']);
         }
     }
 
@@ -304,7 +312,19 @@ class AdminOrderManager implements AdminOrderServices
         DB::beginTransaction();
 
         try {
-            $order = OrdersModel::with('orderDetails', 'orderPayment')->findOrFail($orderId);
+            $order = OrdersModel::with('orderDetails', 'orderPayment', 'user')->findOrFail($orderId);
+
+            $user = auth()->user();
+            $isAdminOrStaff = auth('admin_api')->check() || auth('subadmin_api')->check() || auth('artist_api')->check();
+            if ($user && ($user instanceof \App\Models\AdminModel || $user instanceof \App\Models\SubAdminModel)) {
+                $isAdminOrStaff = true;
+            }
+
+            if (!$isAdminOrStaff && $user && (int)$order->user_id !== (int)$user->user_id) {
+                return response()->json([
+                    'message' => 'Unauthorized to cancel this order.'
+                ], 403);
+            }
 
             $blocked = ['To Receive', 'Completed'];
             if (in_array($order->status, $blocked)) {
@@ -349,15 +369,32 @@ class AdminOrderManager implements AdminOrderServices
                     return response()->json(['message' => 'Item is already cancelled.'], 400);
                 }
 
+                $originalTotalPrice = floatval($order->total_price);
+                $currentSubtotalBeforeCancel = $order->orderDetails()
+                    ->where('status', '!=', 'Cancelled')
+                    ->sum('subtotal');
+                $shippingFee = max(0, $originalTotalPrice - $currentSubtotalBeforeCancel);
+
                 $item->update(['status' => 'Cancelled']);
 
                 $activeTotal = $order->orderDetails()
                     ->where('status', '!=', 'Cancelled')
                     ->sum('subtotal');
-                $order->update([
-                    'total_price'   => $activeTotal,
-                    'cancel_reason' => $reason
-                ]);
+
+                if ($activeTotal > 0) {
+                    $newTotalPrice = $activeTotal + $shippingFee;
+                    $order->update([
+                        'total_price'   => $newTotalPrice,
+                        'cancel_reason' => $reason
+                    ]);
+                } else {
+                    $allSubtotal = $order->orderDetails()->sum('subtotal');
+                    $restoreTotalPrice = $allSubtotal + $shippingFee;
+                    $order->update([
+                        'total_price'   => $restoreTotalPrice,
+                        'cancel_reason' => $reason
+                    ]);
+                }
 
                 $totalItems = $order->orderDetails()->count();
                 $cancelledItems = $order->orderDetails()->where('status', 'Cancelled')->count();
@@ -369,6 +406,16 @@ class AdminOrderManager implements AdminOrderServices
                 }
 
                 DB::commit();
+
+                // Send email/database notification
+                try {
+                    $freshOrder = $order->fresh(['user', 'orderDetails.product']);
+                    if ($freshOrder->user) {
+                        $freshOrder->user->notify(new OrderCancelled($freshOrder, $orderItemId, $reason));
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Failed to send item cancellation notification: " . $e->getMessage());
+                }
 
                 return response()->json([
                     'message' => 'Item cancelled successfully.',
@@ -384,6 +431,16 @@ class AdminOrderManager implements AdminOrderServices
             $order->orderDetails()->update(['status' => 'Cancelled']);
 
             DB::commit();
+
+            // Send email/database notification
+            try {
+                $freshOrder = $order->fresh(['user', 'orderDetails.product']);
+                if ($freshOrder->user) {
+                    $freshOrder->user->notify(new OrderCancelled($freshOrder, null, $reason));
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to send order cancellation notification: " . $e->getMessage());
+            }
 
             $msg = 'Order cancelled successfully.';
             if ($refundTriggered) $msg .= ' Refund initiated via PayMongo.';
