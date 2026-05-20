@@ -136,6 +136,9 @@ Route::middleware('auth:sanctum,admin_api,subadmin_api')->group(function () {
     Route::delete('/delete_employee/{id}', [AdminDashboardController::class, 'deleteEmployee']);
     Route::delete('/delete_sub_admin/{id}', [AdminDashboardController::class, 'deleteSubAdmin']);
     Route::post('/toggle-bot/{userId}', [\App\Http\Controllers\FaqController::class, 'toggleBotActive']);
+    
+    // Notification Badges
+    Route::get('/admin/badge-counts', [\App\Http\Controllers\AdminBadgeController::class, 'getCounts']);
 });
 
 Route::get('/faqs', [App\Http\Controllers\FaqController::class, 'index']);
@@ -216,12 +219,13 @@ Route::put('/update_customer/{id}', [UserManagementController::class, 'updateCus
 Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('verified')->group(function () {
         Route::post('/returns', [ReturnRefundController::class, 'store']);
-        Route::post('/returns/{return_id}/messages', [ReturnMessageController::class, 'store']);
     });
+    Route::post('/returns/{return_id}/messages', [ReturnMessageController::class, 'store']);
     
     Route::get('/returns', [ReturnRefundController::class, 'index']);
     Route::get('/returns/{id}', [ReturnRefundController::class, 'show']);
     Route::patch('/returns/{id}/status', [ReturnRefundController::class, 'updateStatus']);
+    Route::patch('/returns/{id}/authorize', [ReturnRefundController::class, 'authorizeSubAdmin']);
     Route::get('/returns/{return_id}/messages', [ReturnMessageController::class, 'index']);
 
     // Return Policies (Admin)

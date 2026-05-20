@@ -38,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
             'artist'   => \App\Models\ArtistModel::class, // ✅ ADDED
         ]);
 
+        \App\Models\OrdersModel::observe(\App\Observers\SidebarBadgeObserver::class);
+        \App\Models\ReturnRefundModel::observe(\App\Observers\SidebarBadgeObserver::class);
+        \App\Models\Inquiry::observe(\App\Observers\SidebarBadgeObserver::class);
+        \App\Models\Message::observe(\App\Observers\SidebarBadgeObserver::class);
+
         $caPath = 'D:\Download\cacert.pem';
         if (file_exists($caPath)) {
             stream_context_set_default([

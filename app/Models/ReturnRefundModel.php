@@ -27,11 +27,13 @@ class ReturnRefundModel extends Model
         'refund_proof',
         'refund_completed_at',
         'paymongo_refund_id',
+        'subadmin_authorized',
     ];
 
     protected $casts = [
-        'status'        => 'string',
-        'refund_amount' => 'decimal:2',
+        'status'              => 'string',
+        'refund_amount'       => 'decimal:2',
+        'subadmin_authorized' => 'boolean',
     ];
 
     // ─────────────────────────────────────────────────────────────────────────

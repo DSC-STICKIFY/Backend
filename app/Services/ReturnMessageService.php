@@ -25,11 +25,11 @@ class ReturnMessageService
             'message' => $message,
         ]);
 
-        $returnMessage->load(['userSender', 'adminSender']);
+        $returnMessage->load(['userSender', 'adminSender', 'subAdminSender']);
 
         // Attach unified sender
         $returnMessage->sender = $returnMessage->sender_type === 'admin'
-            ? $returnMessage->adminSender
+            ? ($returnMessage->adminSender ?? $returnMessage->subAdminSender)
             : $returnMessage->userSender;
 
         return $returnMessage;
@@ -41,12 +41,13 @@ class ReturnMessageService
             ->with([
                 'userSender:user_id,first_name,last_name',
                 'adminSender:admin_id,first_name,last_name',
+                'subAdminSender:sub_admin_id,first_name,last_name',
             ])
             ->orderBy('created_at', 'asc')
             ->get()
             ->map(function ($msg) {
                 $msg->sender = $msg->sender_type === 'admin'
-                    ? $msg->adminSender
+                    ? ($msg->adminSender ?? $msg->subAdminSender)
                     : $msg->userSender;
                 return $msg;
             });
@@ -54,7 +55,8 @@ class ReturnMessageService
 
     private function getSenderType($user): string
     {
-        if ($user instanceof \App\Models\AdminModel || $user->getTable() === 'admin_table') {
+        if ($user instanceof \App\Models\AdminModel || $user->getTable() === 'admin_table' ||
+            $user instanceof \App\Models\SubAdminModel || $user->getTable() === 'sub_admin_table') {
             return 'admin';
         }
         return 'user';
@@ -62,6 +64,6 @@ class ReturnMessageService
 
     private function getSenderId($user)
     {
-        return $user->admin_id ?? $user->user_id ?? $user->id;
+        return $user->admin_id ?? $user->sub_admin_id ?? $user->user_id ?? $user->id;
     }
 }

@@ -739,8 +739,8 @@ class AdminOrderManager implements AdminOrderServices
     {
         try {
             $order = OrdersModel::findOrFail($orderId);
-            $order->update(['status' => 'Shipment Approved']);
-            $order->orderDetails()->update(['status' => 'Shipment Approved']);
+            $order->update(['status' => 'To Shipping']);
+            $order->orderDetails()->update(['status' => 'To Shipping']);
 
             return response()->json([
                 'success' => true,

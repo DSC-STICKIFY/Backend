@@ -12,6 +12,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use App\Notifications\RefundProcessed;
+use App\Models\ReturnMessageModel;
 
 class ReturnRefundService
 {
@@ -164,9 +165,41 @@ class ReturnRefundService
         }
     }
 
+    public function authorizeSubAdmin($returnId)
+    {
+        $authUser = auth()->user();
+        if ($authUser && method_exists($authUser, 'getTable') && $authUser->getTable() === 'sub_admin_table') {
+            throw ValidationException::withMessages([
+                'auth' => 'Only the Super Admin can authorize a sub-admin.'
+            ]);
+        }
+
+        $return = ReturnRefundModel::findOrFail($returnId);
+        $return->update(['subadmin_authorized' => true]);
+
+        // Post system message log
+        ReturnMessageModel::create([
+            'return_id' => $returnId,
+            'sender_type' => 'admin',
+            'sender_id' => auth()->id(),
+            'message' => '[SYSTEM] Super Admin has authorized Sub-Admin to approve or reject this return/refund request.',
+        ]);
+
+        return $return->load(['media', 'messages', 'orderDetail.product', 'order']);
+    }
+
     public function updateReturnStatus($returnId, $status, $proofFile = null)
     {
         $return = ReturnRefundModel::with(['order.orderPayment', 'orderDetail', 'user'])->findOrFail($returnId);
+
+        $authUser = auth()->user();
+        if ($authUser && method_exists($authUser, 'getTable') && $authUser->getTable() === 'sub_admin_table') {
+            if (!$return->subadmin_authorized) {
+                throw ValidationException::withMessages([
+                    'status' => 'You are not authorized by the Super Admin to process this return/refund request.'
+                ]);
+            }
+        }
 
         if (!in_array($status, ['approved', 'rejected', 'refunded', 'completed'])) {
             throw ValidationException::withMessages([
@@ -264,8 +297,9 @@ class ReturnRefundService
     public function getReturn($returnId)
     {
         return ReturnRefundModel::with([
-            'order:order_id,order_number,total_price,payment_method,status',
-            'orderDetail.product:product_id,product_name,product_image,product_price',
+            'order:order_id,order_number,total_price,payment_method,status,artist_id',
+            'order.artist:employee_id,first_name,last_name,email',
+            'orderDetail.product:product_id,product_name,product_image,product_price,is_customizable',
             'media',
             'messages',
         ])->findOrFail($returnId);
@@ -274,8 +308,9 @@ class ReturnRefundService
     public function getAllReturns()
     {
         return ReturnRefundModel::with([
-            'order:order_id,order_number,total_price,payment_method',
-            'orderDetail.product:product_id,product_name,product_image',
+            'order:order_id,order_number,total_price,payment_method,status,artist_id',
+            'order.artist:employee_id,first_name,last_name,email',
+            'orderDetail.product:product_id,product_name,product_image,is_customizable',
             'media',
             'messages',
         ])->orderBy('created_at', 'desc')->get();

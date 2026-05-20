@@ -25,10 +25,15 @@ class ReturnMessageModel extends Model
         return $this->belongsTo(\App\Models\AdminModel::class, 'sender_id', 'admin_id');
     }
 
+    public function subAdminSender()
+    {
+        return $this->belongsTo(\App\Models\SubAdminModel::class, 'sender_id', 'sub_admin_id');
+    }
+
     public function getSenderAttribute()
     {
         if ($this->sender_type === 'admin') { // ✅ consistent with enum
-            return $this->adminSender;
+            return $this->adminSender ?? $this->subAdminSender;
         }
         return $this->userSender;
     }

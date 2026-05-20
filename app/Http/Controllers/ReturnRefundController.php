@@ -131,4 +131,36 @@ class ReturnRefundController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Authorize a sub-admin to approve/reject a return request
+     */
+    public function authorizeSubAdmin(Request $request, $id)
+    {
+        try {
+            $return = $this->returnRefundService->authorizeSubAdmin($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sub-admin successfully authorized.',
+                'data' => $return,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('ReturnRefundController::authorizeSubAdmin Error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to authorize sub-admin.',
+            ], 500);
+        }
+    }
 }
