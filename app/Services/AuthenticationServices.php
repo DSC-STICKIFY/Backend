@@ -237,7 +237,8 @@ class AuthenticationServices
             $service instanceof \App\Services\ArtistAccountServices  => 'artist',
             $service instanceof \App\Services\SubAdminAccountServices => 'subadmin',
             $service instanceof \App\Services\AdminAccountServices    => 'admin',
-            $service instanceof \App\Services\StaffAccountServices    => 'staff', 
+            $service instanceof \App\Services\StaffAccountServices    => 'staff',
+            $service instanceof \App\Services\CustomerServiceAccountServices => 'customer_service',
             $service instanceof \App\Services\UserAccountServices     => 'user',
             default                                                    => 'user',
         };
@@ -250,7 +251,8 @@ class AuthenticationServices
             'admin'    => $service instanceof \App\Services\AdminAccountServices,
             'subadmin' => $service instanceof \App\Services\SubAdminAccountServices,
             'artist'   => $service instanceof \App\Services\ArtistAccountServices,
-            'staff'    => $service instanceof \App\Services\StaffAccountServices, 
+            'staff'    => $service instanceof \App\Services\StaffAccountServices,
+            'customer_service' => $service instanceof \App\Services\CustomerServiceAccountServices,
             default    => false,
         };
     }

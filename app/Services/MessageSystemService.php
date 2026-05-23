@@ -15,8 +15,11 @@ use InvalidArgumentException;
 
 class MessageSystemService
 {
+    // ✅ All roles that are considered "staff" (not customers)
+    private const STAFF_ROLES = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
+
     /**
-     * ✅ CHECK IF ADMIN OR SUBADMIN (supports UserModel with is_admin=1)
+     * ✅ CHECK IF ADMIN OR STAFF ROLE
      */
     private function isAdmin($user): bool
     {
@@ -30,7 +33,8 @@ class MessageSystemService
             return true;
         }
 
-        if (!empty($user->role) && in_array($user->role, ['admin', 'subadmin', 'artist'])) {
+        // ✅ Added customer_service and staff
+        if (!empty($user->role) && in_array(strtolower($user->role), self::STAFF_ROLES)) {
             return true;
         }
 
@@ -38,20 +42,22 @@ class MessageSystemService
     }
 
     /**
-     * ✅ GET SENDER ID + SENDER TYPE – FIXED for admin via UserModel
+     * ✅ GET SENDER ID + SENDER TYPE
      */
     private function getSenderInfo($user): array
     {
         if (!$user) return ['id' => null, 'type' => 'guest'];
 
-        $role = $user->role ?? null;
+        $role = strtolower($user->role ?? '');
         if (!$role && !empty($user->is_admin)) { $role = 'admin'; }
 
-        if ($role && in_array(strtolower($role), ['admin', 'subadmin', 'artist', 'staff'])) {
-            $role = strtolower($user->role ?? '');
-            if ($role === 'artist' || $role === 'staff') return ['id' => $user->getKey(), 'type' => 'artist'];
-            if ($role === 'admin') return ['id' => $user->getKey(), 'type' => 'admin'];
-            if ($role === 'subadmin') return ['id' => $user->getKey(), 'type' => 'subadmin'];
+        // ✅ Added customer_service and staff to staff role check
+        if ($role && in_array($role, self::STAFF_ROLES)) {
+            if ($role === 'admin')            return ['id' => $user->getKey(), 'type' => 'admin'];
+            if ($role === 'subadmin')         return ['id' => $user->getKey(), 'type' => 'subadmin'];
+            if ($role === 'artist')           return ['id' => $user->getKey(), 'type' => 'artist'];
+            if ($role === 'staff')            return ['id' => $user->getKey(), 'type' => 'staff'];
+            if ($role === 'customer_service') return ['id' => $user->getKey(), 'type' => 'customer_service'];
         }
 
         return ['id' => $user->getKey(), 'type' => 'customer'];
@@ -59,7 +65,7 @@ class MessageSystemService
 
     /**
      * =========================================================
-     * SEND MESSAGE (Fixed sender_type for admin via UserModel)
+     * SEND MESSAGE
      * =========================================================
      */
     public function sendMessage(Request $request)
@@ -79,7 +85,6 @@ class MessageSystemService
         $isBot = $request->input('is_bot', false);
 
         if ($isBot) {
-            // Bot messages act as Admin messages to the user
             $admin = AdminModel::first();
             $senderId = $admin ? $admin->admin_id : 1;
             $senderType = 'admin';
@@ -89,18 +94,15 @@ class MessageSystemService
             $senderType = $senderInfo['type'];
 
             if ($isAdmin) {
-                // Admin / SubAdmin sending to Customer
                 if (empty($validated['receiver_id'])) {
-                    throw new InvalidArgumentException('receiver_id is required for admin/subadmin.');
+                    throw new InvalidArgumentException('receiver_id is required for admin/staff.');
                 }
                 $receiverId = (int) $validated['receiver_id'];
             } else {
-                // Customer sending to Admin or Assigned Artist
                 $productId = $validated['product_id'] ?? null;
                 $receiverId = null;
 
                 if ($productId) {
-                    // Try to find an active order for this product to see if an artist is assigned
                     $order = \App\Models\OrdersModel::where('user_id', $senderId)
                         ->whereHas('orderDetails', function($q) use ($productId) {
                             $q->where('product_id', $productId);
@@ -124,20 +126,19 @@ class MessageSystemService
             }
         }
 
-        // File Uploads
-        $imagePath = $request->file('image') 
-            ? $request->file('image')->store('message_images', 'public') 
+        $imagePath = $request->file('image')
+            ? $request->file('image')->store('message_images', 'public')
             : null;
 
-        $videoPath = $request->file('video') 
-            ? $request->file('video')->store('message_videos', 'public') 
+        $videoPath = $request->file('video')
+            ? $request->file('video')->store('message_videos', 'public')
             : null;
 
         $message = Message::create([
             'sender_id'   => $senderId,
             'receiver_id' => $receiverId,
             'product_id'  => $validated['product_id'] ?? null,
-            'body'        => $validated['body'] ?? $request->input('message'), // support 'message' or 'body'
+            'body'        => $validated['body'] ?? $request->input('message'),
             'image'       => $imagePath,
             'video'       => $videoPath,
             'sender_type' => $senderType,
@@ -146,18 +147,17 @@ class MessageSystemService
         ]);
 
         Log::info('Message Sent Successfully', [
-            'from'        => $senderInfo['type'],
-            'sender_id'   => $senderInfo['id'],
-            'to'          => $receiverId,
-            'body'        => $message->body,
-            'is_admin'    => $isAdmin
+            'from'      => $senderInfo['type'],
+            'sender_id' => $senderInfo['id'],
+            'to'        => $receiverId,
+            'body'      => $message->body,
+            'is_admin'  => $isAdmin,
         ]);
 
         try {
             broadcast(new MessageSent($message))->toOthers();
         } catch (\Exception $e) {
             Log::error('Pusher broadcast failed: ' . $e->getMessage());
-            // We continue because the message is already saved in DB
         }
 
         return $message;
@@ -165,7 +165,7 @@ class MessageSystemService
 
     /**
      * =========================================================
-     * GET CONVERSATIONS FOR SIDEBAR (Improved with both customer/user types)
+     * GET CONVERSATIONS FOR SIDEBAR
      * =========================================================
      */
     public function getConversations()
@@ -173,14 +173,16 @@ class MessageSystemService
         $user = Auth::user();
 
         if (!$this->isAdmin($user)) {
-            Log::warning('Blocked: Not admin/subadmin', ['user_id' => $user?->id]);
+            Log::warning('Blocked: Not a staff role', ['user_id' => $user?->id, 'role' => $user?->role]);
             return [];
         }
 
-        // Fetch ALL messages involving customers
-        $messages = Message::where(function ($query) {
+        // ✅ Also include customer_service and staff as sender types in message queries
+        $staffSenderTypes = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
+
+        $messages = Message::where(function ($query) use ($staffSenderTypes) {
                 $query->whereIn('sender_type', ['customer', 'user'])
-                      ->orWhereIn('sender_type', ['admin', 'subadmin', 'artist']);
+                      ->orWhereIn('sender_type', $staffSenderTypes);
             })
             ->orderBy('created_at', 'desc')
             ->get();
@@ -191,20 +193,18 @@ class MessageSystemService
             return [];
         }
 
-        // Group by (customer_id, product_id) → one row per product per customer
         $grouped = [];
 
         foreach ($messages as $msg) {
             if (in_array($msg->sender_type, ['customer', 'user'])) {
                 $customerId = $msg->sender_id;
             } else {
-                // If it's admin/subadmin/artist, the customer is the receiver
                 $customerId = $msg->receiver_id;
             }
 
             if (!$customerId) continue;
 
-            $productId = $msg->product_id;  // null = general (legacy) conversation
+            $productId = $msg->product_id;
             $key = $customerId . '_' . ($productId ?? 'general');
 
             if (!isset($grouped[$key])) {
@@ -227,7 +227,6 @@ class MessageSystemService
             $userModel = UserModel::where('user_id', $customerId)->first();
             if (!$userModel) continue;
 
-            // Look up product name when product_id is set
             $productName = null;
             $productCategory = null;
             if ($productId) {
@@ -257,7 +256,6 @@ class MessageSystemService
             ];
         }
 
-        // Sort by latest message descending
         usort($conversations, fn($a, $b) =>
             strcmp((string)($b['last_at'] ?? ''), (string)($a['last_at'] ?? ''))
         );
@@ -269,8 +267,7 @@ class MessageSystemService
 
     /**
      * =========================================================
-     * GET MESSAGES BETWEEN ADMIN AND SPECIFIC USER
-     * ✅ FIXED: Accepts both 'customer' and 'user' as customer types
+     * GET MESSAGES BETWEEN ADMIN/STAFF AND SPECIFIC USER
      * =========================================================
      */
     public function getAdminUserMessages(int $userId)
@@ -278,26 +275,26 @@ class MessageSystemService
         $productId = request()->query('product_id');
         $lastId = request()->query('last_id');
 
-        // Normalize product_id
         if ($productId === 'null' || $productId === '' || $productId === 'undefined' || $productId === '0') {
             $productId = null;
         }
 
+        // ✅ Include customer_service and staff as valid reply sender types
+        $staffSenderTypes = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
+
         $messages = Message::where(function ($q) use ($userId, $productId, $lastId) {
-                // Customer messages (both old 'user' and new 'customer' types)
                 $q->where('sender_id', $userId)
                   ->whereIn('sender_type', ['customer', 'user']);
-                
+
                 if ($productId) $q->where('product_id', $productId);
                 else $q->whereNull('product_id');
 
                 if ($lastId) $q->where('id', '>', $lastId);
             })
-            ->orWhere(function ($q) use ($userId, $productId, $lastId) {
-                // Admin/Subadmin/Artist messages
+            ->orWhere(function ($q) use ($userId, $productId, $lastId, $staffSenderTypes) {
                 $q->where('receiver_id', $userId)
-                  ->whereIn('sender_type', ['admin', 'subadmin', 'artist']);
-                
+                  ->whereIn('sender_type', $staffSenderTypes);
+
                 if ($productId) $q->where('product_id', $productId);
                 else $q->whereNull('product_id');
 
@@ -306,7 +303,6 @@ class MessageSystemService
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // Mark unread customer messages as read
         Message::where('sender_id', $userId)
             ->whereIn('sender_type', ['customer', 'user'])
             ->where('is_read', false)
@@ -317,7 +313,7 @@ class MessageSystemService
 
     /**
      * =========================================================
-     * GET MESSAGES FOR CUSTOMER SIDE (also supports both types)
+     * GET MESSAGES FOR CUSTOMER SIDE
      * =========================================================
      */
     public function getUserMessages()
@@ -327,24 +323,26 @@ class MessageSystemService
         $productId = request()->query('product_id');
         $lastId = request()->query('last_id');
 
-        // Normalize product_id (handle 'null' string, empty string, or 'undefined' from frontend)
         if ($productId === 'null' || $productId === '' || $productId === 'undefined' || $productId === '0') {
             $productId = null;
         }
 
+        // ✅ Customer sees replies from all staff types including customer_service
+        $staffSenderTypes = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
+
         $messages = Message::where(function ($q) use ($userId, $productId, $lastId) {
                 $q->where('sender_id', $userId)
                   ->whereIn('sender_type', ['customer', 'user']);
-                
+
                 if ($productId) $q->where('product_id', $productId);
                 else $q->whereNull('product_id');
-                
+
                 if ($lastId) $q->where('id', '>', $lastId);
             })
-            ->orWhere(function ($q) use ($userId, $productId, $lastId) {
+            ->orWhere(function ($q) use ($userId, $productId, $lastId, $staffSenderTypes) {
                 $q->where('receiver_id', $userId)
-                  ->whereIn('sender_type', ['admin', 'subadmin', 'artist']);
-                
+                  ->whereIn('sender_type', $staffSenderTypes);
+
                 if ($productId) $q->where('product_id', $productId);
                 else $q->whereNull('product_id');
 
@@ -353,8 +351,6 @@ class MessageSystemService
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // ✅ ULTRA-CLEAN: Mark ALL unread messages for this user as read
-        // No matter who sent it, if the user is the receiver and they view the inbox, it's read.
         Message::where('receiver_id', $userId)
             ->where('is_read', false)
             ->update(['is_read' => true]);

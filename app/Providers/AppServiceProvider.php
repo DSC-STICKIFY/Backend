@@ -7,6 +7,7 @@ use App\Services\ArtistAccountServices;
 use App\Services\AuthenticationServices;
 use App\Services\SubAdminAccountServices;
 use App\Services\StaffAccountServices;
+use App\Services\CustomerServiceAccountServices;
 use App\Services\UserAccountServices;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
                 new SubAdminAccountServices(),
                 new ArtistAccountServices(),
                 new StaffAccountServices(),
+                new CustomerServiceAccountServices(),
                 new UserAccountServices(),
             ]);
         });
