@@ -24,6 +24,7 @@ use App\Http\Controllers\InquiryPaymentController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\ArtistOrderController;
+use App\Http\Controllers\CustomOrderValidationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
@@ -69,7 +70,7 @@ Route::post('/account_registration', [AuthController::class, 'authRegister']);
 Route::post('/auth/google', [GoogleController::class, 'handleGoogleLogin']);
 
 // Shared Account Routes
-Route::middleware('auth:artist_api,admin_api,subadmin_api,sanctum')->group(function () {
+Route::middleware('auth:artist_api,admin_api,subadmin_api,staff_api,sanctum')->group(function () {
     Route::get('/get_user_info', [AuthController::class, 'getUser']);
     Route::post('/account_logout', [AuthController::class, 'AuthLogout']);
     Route::put('/update_profile', [AuthController::class, 'updateProfile']);
@@ -99,7 +100,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])->name('verification.verify');
 
 // Admin Orders Management
-Route::middleware('auth:artist_api,admin_api,subadmin_api,sanctum')->group(function () {
+Route::middleware('auth:artist_api,admin_api,subadmin_api,staff_api,sanctum')->group(function () {
     Route::post('/confirm_payment/{orderId}', [AdminOrderController::class, 'confirmPayment']);
     Route::post('/accept_order/{id}', [AdminOrderController::class, 'acceptOrder']);
     Route::post('/ship_order/{id}', [AdminOrderController::class, 'shipOrder']);
@@ -111,18 +112,33 @@ Route::middleware('auth:artist_api,admin_api,subadmin_api,sanctum')->group(funct
     Route::post('/orders/{id}/approve-return', [AdminOrderController::class, 'approveReturn']);
     Route::post('/orders/{id}/reject-return', [AdminOrderController::class, 'rejectReturn']);
     Route::post('/out_for_delivery/{id}', [AdminOrderController::class, 'outForDelivery']);
-    
+
     // Artist Workflow
     Route::post('/orders/{id}/assign-artist', [AdminOrderController::class, 'assignArtist']);
     Route::post('/orders/{id}/approve-shipment-request', [AdminOrderController::class, 'approveShipmentRequest']);
     Route::post('/orders/{id}/reject-shipment-request', [AdminOrderController::class, 'rejectShipmentRequest']);
-    
+
     // Artist Actions
     Route::middleware('auth:artist_api,sanctum')->group(function () {
         Route::post('/artist/orders/{id}/mark-in-progress', [ArtistOrderController::class, 'markInProgress']);
         Route::post('/artist/orders/{id}/upload-design', [ArtistOrderController::class, 'uploadFinalDesign']);
         Route::post('/artist/orders/{id}/request-shipment', [ArtistOrderController::class, 'requestShipment']);
     });
+
+    // ── Custom Order Validation Workflow ─────────────────────────────────────
+    // CS Actions
+    Route::post('/orders/{id}/cs-send-to-staff', [CustomOrderValidationController::class, 'sendToStaff']);
+    Route::post('/orders/{id}/cs-reject', [CustomOrderValidationController::class, 'csReject']);
+    Route::post('/orders/{id}/accept-partial', [CustomOrderValidationController::class, 'acceptPartial']);
+    Route::post('/orders/{id}/decline-partial', [CustomOrderValidationController::class, 'declinePartial']);
+    Route::get('/cs/validation-queue', [CustomOrderValidationController::class, 'getCsQueue']);
+});
+
+Route::middleware('auth:staff_api')->group(function () {
+    Route::post('/orders/{id}/staff-confirm-shipment', [AdminOrderController::class, 'staffConfirmShipment']);
+    Route::post('/orders/{id}/staff-validate', [CustomOrderValidationController::class, 'staffValidate']);
+    Route::get('/staff/pending-validation', [CustomOrderValidationController::class, 'getPendingValidation']);
+    Route::get('/staff/dispatched-orders', [AdminOrderController::class, 'getDispatchedOrders']);
 });
 
 

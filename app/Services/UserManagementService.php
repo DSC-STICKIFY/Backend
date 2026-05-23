@@ -30,6 +30,9 @@ class UserManagementService
         if (isset($validated['password'])) {
             $validated['password'] = \Illuminate\Support\Facades\Hash::make($validated['password']);
         }
+        if (isset($validated['role'])) {
+            $validated['role'] = strtolower(str_replace(' ', '_', $validated['role']));
+        }
 
         $employee = EmployeeModel::findOrFail($id);
         $employee->update($validated);

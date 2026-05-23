@@ -32,7 +32,7 @@ class AddEmployeeRequest extends FormRequest
             'password' => 'required|string|min:6',
             'address' => 'required|string|max:500',
             'contact_number' => 'required|string|max:20',
-            'role' => 'required|string|in:Staff,Artist',
+            'role' => 'required|string|in:Staff,Artist,Customer Service,staff,artist,customer_service,customer service',
         ];
     }
 }

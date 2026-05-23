@@ -73,6 +73,11 @@ return [
             'driver' => 'sanctum',
             'provider' => 'artists',
         ],
+
+        'staff_api' => [
+            'driver' => 'sanctum',
+            'provider' => 'staff',
+        ],
     ],
 
     /*
@@ -116,6 +121,12 @@ return [
         'artists' => [
             'driver' => 'eloquent',
             'model' => App\Models\ArtistModel::class,
+        ],
+
+        // ✅ STAFF
+        'staff' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\StaffModel::class,
         ],
     ],
 

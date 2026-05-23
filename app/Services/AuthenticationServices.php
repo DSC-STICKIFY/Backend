@@ -30,7 +30,7 @@ class AuthenticationServices
             $account = $service->login($data);
 
             if ($account) {
-                $role  = $this->getRoleFromService($service);
+                $role  = strtolower($account->role ?? $this->getRoleFromService($service));
                 $token = $account->createToken("{$role}_login_token")->plainTextToken;
 
                 return [
@@ -91,12 +91,12 @@ class AuthenticationServices
                     $token = $account->createToken("{$role}_registration_token")->plainTextToken;
 
                     return [
-                        'user_id' => $account->user_id ?? $account->admin_id ?? $account->sub_admin_id ?? $account->artist_id ?? $account->employee_id,
+                        'user_id' => $account->user_id ?? $account->admin_id ?? $account->sub_admin_id ?? $account->artist_id ?? $account->staff_id ?? $account->employee_id,
                         'success' => true,
                         'message' => ucfirst($role) . ' account successfully registered!',
                         'token' => $token,
                         'user' => [
-                            'user_id' => $account->user_id ?? $account->admin_id ?? $account->sub_admin_id ?? $account->artist_id ?? $account->employee_id,
+                            'user_id' => $account->user_id ?? $account->admin_id ?? $account->sub_admin_id ?? $account->artist_id ?? $account->staff_id ?? $account->employee_id,
                             'first_name' => $account->first_name,
                             'last_name' => $account->last_name,
                             'role'           => $role,
@@ -156,11 +156,12 @@ class AuthenticationServices
             $user->save();
 
             return [
-                'user_id' => $user->user_id ?? $user->admin_id ?? $user->sub_admin_id ?? $user->artist_id,
+                // ✅ $user, not $account
+                'user_id' => $user->user_id ?? $user->admin_id ?? $user->sub_admin_id ?? $user->artist_id ?? $user->employee_id,
                 'success' => true,
                 'message' => 'Profile updated successfully.',
                 'user' => [
-                    'user_id'        => $user->user_id ?? $user->admin_id ?? $user->sub_admin_id ?? $user->artist_id,
+                    'user_id'        => $user->user_id ?? $user->admin_id ?? $user->sub_admin_id ?? $user->artist_id ?? $user->employee_id,
                     'first_name'     => $user->first_name,
                     'last_name'      => $user->last_name,
                     'email'          => $user->email,
@@ -173,14 +174,14 @@ class AuthenticationServices
                 ],
                 'status' => 200,
             ];
-    } catch (\Exception $e) {
-        return [
-            'success' => false,
-            'message' => 'Failed to update profile.',
-            'status'  => 500,
-        ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Failed to update profile.',
+                'status'  => 500,
+            ];
+        }
     }
-}
     public function updatePassword($user, array $data): array
     {
         if (!Hash::check($data['current_password'], $user->password)) {
@@ -230,12 +231,13 @@ class AuthenticationServices
         }
     }
 
-    private function getRoleFromService($service): string
+        private function getRoleFromService($service): string
     {
         return match (true) {
             $service instanceof \App\Services\ArtistAccountServices  => 'artist',
             $service instanceof \App\Services\SubAdminAccountServices => 'subadmin',
             $service instanceof \App\Services\AdminAccountServices    => 'admin',
+            $service instanceof \App\Services\StaffAccountServices    => 'staff', 
             $service instanceof \App\Services\UserAccountServices     => 'user',
             default                                                    => 'user',
         };
@@ -248,6 +250,7 @@ class AuthenticationServices
             'admin'    => $service instanceof \App\Services\AdminAccountServices,
             'subadmin' => $service instanceof \App\Services\SubAdminAccountServices,
             'artist'   => $service instanceof \App\Services\ArtistAccountServices,
+            'staff'    => $service instanceof \App\Services\StaffAccountServices, 
             default    => false,
         };
     }

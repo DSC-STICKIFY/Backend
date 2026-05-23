@@ -49,7 +49,12 @@ class AdminOrderManager implements AdminOrderServices
                     'artist_id',           // â†  add
                     'final_design_url',
                     'shipment_requested_at',
-                    'shipment_note'
+                    'shipment_note',
+                    'cs_review_status',
+                    'staff_validation_status',
+                    'staff_validation_note',
+                    'manual_approved_quantity',
+                    'rejection_reason'
                 );
 
             // ðŸŽ¨ Filter by Artist ID if the user is an artist
@@ -90,6 +95,36 @@ class AdminOrderManager implements AdminOrderServices
             return response()->json(['message' => 'Failed to fetch recent orders', 'error' => $e->getMessage()], 500);
         }
     }
+
+    public function getDispatchedOrders(): JsonResponse
+{
+    try {
+        $query = OrdersModel::with(['user', 'orderDetails.product'])
+            ->whereIn('status', ['To Receive', 'Shipped', 'Completed'])
+            ->whereNotNull('tracking_number')
+            ->select(
+                'order_id', 'order_number', 'status', 'user_id',
+                'courier', 'order_date', 'total_price', 'payment_method',
+                'contact_number', 'address', 'tracking_number',
+                'delivery_deadline', 'dispatched_at', 'created_at', 'artist_id'
+            );
+
+        $user = auth('artist_api')->user() ?? auth('sanctum')->user();
+        if ($user instanceof \App\Models\ArtistModel) {
+            $query->where('artist_id', $user->employee_id);
+        }
+
+        $orders = $query->orderBy('dispatched_at', 'desc')->get();
+
+        return response()->json(['orders' => $orders]);
+    } catch (\Throwable $e) {
+        Log::error('Dispatched orders error: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to fetch dispatched orders',
+            'error'   => $e->getMessage(),
+        ], 500);
+    }
+}
 
     // ==================== PER-ITEM STATUS UPDATES ====================
 
@@ -227,7 +262,30 @@ class AdminOrderManager implements AdminOrderServices
         DB::beginTransaction();
 
         try {
-            $order = OrdersModel::with('orderDetails')->findOrFail($orderId);
+            $order = OrdersModel::with('orderDetails.product')->findOrFail($orderId);
+            
+            // Check if it's customizable
+            $isCustom = false;
+            if ($orderDetailsId) {
+                $itemToCheck = OrderDetails::with('product')->where('order_details_id', $orderDetailsId)->first();
+                if ($itemToCheck && $itemToCheck->product && $itemToCheck->product->is_customizable) {
+                    $isCustom = true;
+                }
+            } else {
+                $isCustom = $order->orderDetails->contains(function ($item) {
+                    return $item->product && $item->product->is_customizable;
+                });
+            }
+
+            if ($isCustom && in_array($newStatus, ['To Ship', 'Item Ready'])) {
+                if (!in_array($order->status, ['Awaiting Shipment Approval', 'To Shipping'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customizable orders must be finalized by the artist and approved before shipment.'
+                    ], 400);
+                }
+            }
+
             $itemCount = $order->orderDetails()->count();
 
             if ($orderDetailsId) {
@@ -249,6 +307,10 @@ class AdminOrderManager implements AdminOrderServices
 
             if ($newStatus === 'Completed') {
                 $this->recordPaymentIfNeeded($order);
+            }
+
+            if ($newStatus === 'To Process' && $order->cs_review_status === 'pending_admin_approval') {
+                $order->update(['cs_review_status' => 'pending_review']);
             }
 
             DB::commit();
@@ -670,8 +732,9 @@ class AdminOrderManager implements AdminOrderServices
         try {
             $order = OrdersModel::findOrFail($orderId);
             $order->update([
-                'artist_id' => $artistId,
-                'status'    => 'To Process'
+                'artist_id'        => $artistId,
+                'status'           => 'To Process',
+                'cs_review_status' => 'assigned',   // mark as assigned so CS queue shows "Assigned"
             ]);
 
             // Sync all order detail items to "To Process"
@@ -796,16 +859,46 @@ class AdminOrderManager implements AdminOrderServices
     {
         try {
             $order = OrdersModel::findOrFail($orderId);
-            $order->update(['status' => 'To Shipping']);
-            $order->orderDetails()->update(['status' => 'To Shipping']);
+            $order->update(['status' => 'Approved for Shipping']);
+            $order->orderDetails()->update(['status' => 'Approved for Shipping']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Shipment request approved.',
+                'message' => 'Shipment request approved. Staff has been notified to prepare the product.',
                 'order'   => $order->fresh()
             ]);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Failed to approve shipment.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Staff confirms the order is packed and ready — moves status to "To Ship".
+     */
+    public function staffConfirmShipment(int $orderId): JsonResponse
+    {
+        try {
+            $order = OrdersModel::findOrFail($orderId);
+
+            if ($order->status !== 'Approved for Shipping') {
+                return response()->json([
+                    'message' => 'Order is not in "Approved for Shipping" status.',
+                ], 422);
+            }
+
+            $order->update([
+                'status'    => 'To Ship',
+                'shipped_at' => now(),
+            ]);
+            $order->orderDetails()->update(['status' => 'To Ship']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order confirmed as shipped. Ready for dispatch.',
+                'order'   => $order->fresh()
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Failed to confirm shipment.', 'error' => $e->getMessage()], 500);
         }
     }
 

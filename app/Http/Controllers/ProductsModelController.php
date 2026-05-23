@@ -42,9 +42,9 @@ class ProductsModelController extends Controller
         return $this->service->deleteProduct($id);
     }
 
-    public function getAllproducts()
+    public function getAllProducts()
     {
-        return $this->service->getAllproducts();
+        return $this->service->getAllProducts();
     }
 
     public function viewProductDetails($id)

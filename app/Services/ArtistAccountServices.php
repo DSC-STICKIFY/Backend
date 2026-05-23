@@ -10,7 +10,7 @@ class ArtistAccountServices implements AuthServices
 {
     public function login(array $data): ?ArtistModel
     {
-        $artist = ArtistModel::where('email', $data['email'])->first();
+        $artist = ArtistModel::where('email', $data['email'])->where('role', 'artist')->first();
 
         if (!$artist || !Hash::check($data['password'], $artist->password)) {
             return null;

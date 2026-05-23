@@ -117,6 +117,15 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             $orderDetails['order_date'] = Carbon::now()->toDateTimeString();
             $orderDetails['status'] = 'Pending';
 
+            // Check if any ordered product is customizable
+            $productIds = collect($items)->pluck('product_id')->unique()->toArray();
+            $hasCustomizable = ProductsModel::whereIn('product_id', $productIds)
+                ->where('is_customizable', 1)
+                ->exists();
+
+            $orderDetails['cs_review_status'] = $hasCustomizable ? 'pending_admin_approval' : 'not_applicable';
+            $orderDetails['staff_validation_status'] = $hasCustomizable ? 'pending_validation' : 'not_applicable';
+
             $order = OrdersModel::create($orderDetails);
 
             foreach ($items as $item) {

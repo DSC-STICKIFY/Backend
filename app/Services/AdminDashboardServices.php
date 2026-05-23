@@ -52,6 +52,9 @@ class AdminDashboardServices
         if (isset($employeeData['password'])) {
             $employeeData['password'] = \Illuminate\Support\Facades\Hash::make($employeeData['password']);
         }
+        if (isset($employeeData['role'])) {
+            $employeeData['role'] = strtolower(str_replace(' ', '_', $employeeData['role']));
+        }
         $employee = EmployeeModel::create($employeeData);
 
         return $employee;

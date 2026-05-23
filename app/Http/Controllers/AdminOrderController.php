@@ -40,6 +40,11 @@ class AdminOrderController extends Controller
     {
         return $this->adminOrderManager->getOrderList();
     }
+    
+    public function getDispatchedOrders(): JsonResponse
+    {
+        return $this->adminOrderManager->getDispatchedOrders();
+    }
 
     // ====================== PER-ITEM STATUS ACTIONS ======================
 
@@ -209,6 +214,11 @@ class AdminOrderController extends Controller
     public function rejectShipmentRequest(Request $request, int $orderId): JsonResponse
     {
         return $this->adminOrderManager->rejectShipmentRequest($request, $orderId);
+    }
+
+    public function staffConfirmShipment(int $orderId): JsonResponse
+    {
+        return $this->adminOrderManager->staffConfirmShipment($orderId);
     }
 
     // ====================== OTHER ACTIONS ======================

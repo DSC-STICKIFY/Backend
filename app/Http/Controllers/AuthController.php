@@ -61,8 +61,16 @@ class AuthController extends Controller
 
     public function getUser()
     {
+        // auth()->user() uses the default web guard (UserModel) and returns null
+        // for admin/subadmin/artist/staff tokens. We must resolve across all API guards.
+        $user = auth('artist_api')->user()
+            ?? auth('admin_api')->user()
+            ?? auth('subadmin_api')->user()
+            ?? auth('staff_api')->user()
+            ?? auth('sanctum')->user();
+
         return response()->json([
-            'user' => auth()->user(),
+            'user' => $user,
         ]);
     }
 

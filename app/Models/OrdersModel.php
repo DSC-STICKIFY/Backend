@@ -44,6 +44,12 @@ class OrdersModel extends Model
         'shipment_note',
         'cancel_reason',
         'refund_status',
+        // Manual validation workflow fields
+        'cs_review_status',
+        'staff_validation_status',
+        'manual_approved_quantity',
+        'staff_validation_note',
+        'rejection_reason',
     ];
 
     protected $casts = [
