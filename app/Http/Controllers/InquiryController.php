@@ -67,7 +67,7 @@ class InquiryController extends Controller
      */
     public function index()
     {
-        $inquiries = Inquiry::orderBy('created_at', 'desc')->get();
+        $inquiries = Inquiry::with('user')->orderBy('created_at', 'desc')->get();
         return response()->json(['data' => $inquiries]);
     }
 
@@ -98,9 +98,8 @@ class InquiryController extends Controller
         
         $inquiry->save();
 
-        // Notify the customer on meaningful status transitions only.
-        // 'pending' and 'reviewed' are internal admin states — no email needed.
-        $notifiableStatuses = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'rejected'];
+        // Notify the customer on meaningful status transitions.
+        $notifiableStatuses = ['reviewed', 'quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'rejected'];
 
         if (in_array($inquiry->status, $notifiableStatuses)) {
             if ($inquiry->user) {
@@ -112,6 +111,8 @@ class InquiryController extends Controller
                     ->notify(new InquiryStatusUpdated($inquiry));
             }
         }
+
+        $inquiry->load('user');
 
         return response()->json([
             'message' => 'Inquiry status updated successfully',

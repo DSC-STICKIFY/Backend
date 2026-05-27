@@ -142,7 +142,7 @@ class PromotionServices
             'start_date'     => 'nullable|date',
             'end_date'       => 'nullable|date|after_or_equal:start_date',
             'usage_limit'    => 'nullable|integer|min:1',
-            'status'         => 'required|in:active,inactive',
+            'status'         => 'required|in:active,inactive,pending_review,draft',
             'applicable_to'  => 'required|in:all,categories,types,products',
             'applicable_ids' => 'required_if:applicable_to,categories,products|array',
         ];
@@ -174,7 +174,7 @@ class PromotionServices
             'start_date'     => 'nullable|date',
             'end_date'       => 'nullable|date',
             'usage_limit'    => 'nullable|integer|min:1',
-            'status'         => 'sometimes|in:active,inactive',
+            'status'         => 'sometimes|in:active,inactive,pending_review,draft,cancelled,sent,ready_to_send',
             'applicable_to'  => 'sometimes|in:all,categories,types,products',
             'applicable_ids' => 'sometimes|array',
         ];
@@ -247,6 +247,12 @@ class PromotionServices
     public function createPromotion(array $data): array
     {
         $validated     = $this->validateStore($data);
+        
+        // Force the promotion status to pending_review so that it must be reviewed and manually sent by Customer Service.
+        if (in_array($validated['status'] ?? '', ['active', 'pending_review'])) {
+            $validated['status'] = 'pending_review';
+        }
+
         $applicableTo  = $validated['applicable_to'];
         $applicableIds = $validated['applicable_ids'] ?? [];
 
@@ -286,13 +292,7 @@ class PromotionServices
         });
 
         $promo->load(['categories', 'products', 'types']);
-        $transformed = $this->transform($promo);
-
-        if ($transformed['status'] === 'active') {
-            $this->notifyUsersOfPromotion($transformed);
-        }
-
-        return $transformed;
+        return $this->transform($promo);
     }
 
     private function notifyUsersOfPromotion(array $promoData): void
@@ -365,10 +365,6 @@ class PromotionServices
                         ], $applicableIds)
                     );
                 }
-            }
-
-            if (isset($validated['status']) && $validated['status'] === 'active' && $promo->getOriginal('status') !== 'active') {
-                $this->notifyUsersOfPromotion($this->transform($promo));
             }
         });
 

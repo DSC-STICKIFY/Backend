@@ -27,6 +27,8 @@ class ProductsModel extends Model
         'is_car_service',
         'is_motor_service',
         'is_customizable',
+        'product_quantity',
+        'shelf_location',
     ];
 
     protected static function booted()

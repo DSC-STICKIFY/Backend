@@ -54,6 +54,23 @@ class InquiryStatusUpdated extends Notification
 
         switch ($status) {
 
+            // ── REVIEWED ──────────────────────────────────────────────────────
+            case 'reviewed':
+                $mail = (new MailMessage)
+                    ->subject("👀 Inquiry Under Review – DSC Printing Services")
+                    ->greeting("Hello, {$name}!")
+                    ->line("We have received and are currently **reviewing** your inquiry for **{$serviceType}**.")
+                    ->line("Our team will prepare a custom quotation for you shortly.");
+
+                if ($inquiry->admin_message) {
+                    $mail->line("**Note from Admin:** " . $inquiry->admin_message);
+                }
+
+                return $mail
+                    ->line("You will receive another update as soon as the quotation is finalized.")
+                    ->action("View Your Inquiry", $inquiryUrl)
+                    ->line("Thank you for your patience!");
+
             // ── QUOTED ────────────────────────────────────────────────────────
             case 'quoted':
                 $mail = (new MailMessage)
@@ -198,6 +215,7 @@ class InquiryStatusUpdated extends Notification
         $serviceType = ucwords(str_replace('_', ' ', $this->inquiry->service_type));
 
         $statusMessages = [
+            'reviewed'    => "Your {$serviceType} inquiry is under review.",
             'quoted'      => "Your {$serviceType} quote is ready. Amount: ₱" . number_format($this->inquiry->quotation_amount ?? 0, 2),
             'approved'    => "Your {$serviceType} appointment has been approved!",
             'scheduled'   => "Your {$serviceType} appointment is confirmed for "

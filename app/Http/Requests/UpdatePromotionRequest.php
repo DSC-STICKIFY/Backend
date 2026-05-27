@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
@@ -8,41 +7,21 @@ class UpdatePromotionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return true; // policy will gate update
     }
 
     public function rules(): array
     {
         return [
-            'name' => 'sometimes|required|string|max:255',
-            'description' => 'sometimes|nullable|string',
-
-            'type' => 'sometimes|required|in:discount,bundle,freebie,seasonal',
-
-            'discount_type' => 'sometimes|nullable|in:percentage,fixed',
-            'discount_value' => 'sometimes|nullable|numeric|min:0',
-
-            'min_quantity' => 'sometimes|nullable|integer|min:1',
-            'min_amount' => 'sometimes|nullable|numeric|min:0',
-            'max_discount' => 'sometimes|nullable|numeric|min:0',
-
-            'start_date' => 'sometimes|required|date',
-            'end_date' => 'sometimes|required|date|after_or_equal:start_date',
-
-            'usage_limit' => 'sometimes|nullable|integer|min:1',
-
-            'status' => 'sometimes|required|in:active,inactive',
-        ];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'name.required' => 'Promotion name cannot be empty.',
-            'type.required' => 'Promotion type is required.',
-            'type.in' => 'Invalid promotion type.',
-
-            'end_date.after_or_equal' => 'End date must not be before start date.',
+            'title'           => 'required|string|max:255',
+            'description'    => 'nullable|string',
+            'discount_type'   => 'required|in:percentage,fixed,free_shipping',
+            'discount_value'  => 'required|numeric|min:0',
+            'target_type'     => 'required|in:all_verified,recent_buyers,custom_order_customers,inactive_customers',
+            'expiration_date'=> 'required|date|after:today',
+            'banner_image'    => 'nullable|image|max:2048',
+            'promo_code'      => 'nullable|string|max:50|unique:promotions,promo_code,' . $this->route('promotion')->id,
+            'status'          => 'in:draft,pending_review,ready_to_send,cancelled,expired',
         ];
     }
 }

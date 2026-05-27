@@ -47,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Inquiry::observe(\App\Observers\SidebarBadgeObserver::class);
         \App\Models\Message::observe(\App\Observers\SidebarBadgeObserver::class);
 
+        \Illuminate\Support\Facades\Gate::policy(\App\Models\Promotion::class, \App\Policies\PromotionPolicy::class);
+
         $caPath = 'D:\Download\cacert.pem';
         if (file_exists($caPath)) {
             stream_context_set_default([

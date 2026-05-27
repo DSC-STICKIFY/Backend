@@ -92,4 +92,12 @@ class CustomOrderValidationController extends Controller
     {
         return $this->validationService->getPendingStaffValidation();
     }
+
+    /**
+     * Staff completes production and requests shipment approval.
+     */
+    public function completeProduction(Request $request, int $orderId): JsonResponse
+    {
+        return $this->validationService->completeProduction($orderId);
+    }
 }

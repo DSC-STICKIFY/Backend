@@ -115,8 +115,11 @@ Route::middleware('auth:artist_api,admin_api,subadmin_api,staff_api,sanctum')->g
 
     // Artist Workflow
     Route::post('/orders/{id}/assign-artist', [AdminOrderController::class, 'assignArtist']);
+    Route::post('/orders/{id}/approve-layout', [AdminOrderController::class, 'approveLayout']);
+    Route::post('/orders/{id}/reject-layout', [AdminOrderController::class, 'rejectLayout']);
     Route::post('/orders/{id}/approve-shipment-request', [AdminOrderController::class, 'approveShipmentRequest']);
     Route::post('/orders/{id}/reject-shipment-request', [AdminOrderController::class, 'rejectShipmentRequest']);
+    Route::post('/orders/{id}/request-shipment', [ArtistOrderController::class, 'requestShipment']);
 
     // Artist Actions
     Route::middleware('auth:artist_api,sanctum')->group(function () {
@@ -137,6 +140,7 @@ Route::middleware('auth:artist_api,admin_api,subadmin_api,staff_api,sanctum')->g
 Route::middleware('auth:staff_api')->group(function () {
     Route::post('/orders/{id}/staff-confirm-shipment', [AdminOrderController::class, 'staffConfirmShipment']);
     Route::post('/orders/{id}/staff-validate', [CustomOrderValidationController::class, 'staffValidate']);
+    Route::post('/orders/{id}/production-completed', [CustomOrderValidationController::class, 'completeProduction']);
     Route::get('/staff/pending-validation', [CustomOrderValidationController::class, 'getPendingValidation']);
     Route::get('/staff/dispatched-orders', [AdminOrderController::class, 'getDispatchedOrders']);
 });
@@ -212,6 +216,13 @@ Route::get('promotions/product/{productId}', [PromotionController::class, 'produ
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
+    // Controlled Promotions Queue & Analytics endpoints
+    Route::get('promotions/queue', [\App\Http\Controllers\Api\PromotionQueueController::class, 'index']);
+    Route::post('promotions/{promotion}/review', [\App\Http\Controllers\Api\PromotionQueueController::class, 'review']);
+    Route::post('promotions/{promotion}/send', [\App\Http\Controllers\Api\PromotionQueueController::class, 'send']);
+    Route::post('promotions/{promotion}/cancel', [\App\Http\Controllers\Api\PromotionQueueController::class, 'cancel']);
+    Route::get('promotions/{promotion}/analytics', [\App\Http\Controllers\Api\PromotionAnalyticsController::class, 'show']);
+
     Route::post('promotions/{id}/notify', [PromotionController::class, 'notify']);
     Route::apiResource('promotions', PromotionController::class);
 });
@@ -298,4 +309,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/customer/inquiries/{id}/decline', [CustomerInquiryController::class, 'declineQuotation']);
     Route::post('/customer/inquiries/{id}/review', [CustomerInquiryController::class, 'submitReview']);
     Route::patch('/admin/inquiries/{id}/mark-paid', [InquiryPaymentController::class, 'markAsPaid']);
+
+    // Inquiry Messages Routes
+    Route::get('/inquiries/{id}/messages', [\App\Http\Controllers\InquiryMessageController::class, 'index']);
+    Route::post('/inquiries/{id}/messages', [\App\Http\Controllers\InquiryMessageController::class, 'store']);
 });

@@ -206,6 +206,16 @@ class AdminOrderController extends Controller
         return $this->adminOrderManager->assignArtist($orderId, $data['artist_id']);
     }
 
+    public function approveLayout(int $orderId): JsonResponse
+    {
+        return $this->adminOrderManager->approveLayout($orderId);
+    }
+
+    public function rejectLayout(Request $request, int $orderId): JsonResponse
+    {
+        return $this->adminOrderManager->rejectLayout($request, $orderId);
+    }
+
     public function approveShipmentRequest(int $orderId): JsonResponse
     {
         return $this->adminOrderManager->approveShipmentRequest($orderId);

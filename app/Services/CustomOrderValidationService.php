@@ -299,4 +299,33 @@ class CustomOrderValidationService
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Staff: Complete production and request shipment approval from Sub-Admin.
+     */
+    public function completeProduction(int $orderId): JsonResponse
+    {
+        DB::beginTransaction();
+        try {
+            $order = OrdersModel::findOrFail($orderId);
+
+            $order->update([
+                'status'                  => 'Awaiting Shipment Approval',
+                'production_completed_at' => now(),
+                'producer_staff_id'       => auth('staff_api')->id() ?? auth()->id(),
+            ]);
+            $order->orderDetails()->update(['status' => 'Awaiting Shipment Approval']);
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Production completed and shipment approval requested.',
+                'order'   => $order->fresh(),
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('completeProduction error', ['order_id' => $orderId, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
 }

@@ -86,6 +86,8 @@ class AdminProductMgmt implements ProductManagementInterface, ProductViewerInter
             'is_car_service' => (bool) $product->is_car_service,
             'is_motor_service' => (bool) $product->is_motor_service,
             'is_customizable' => (bool) $product->is_customizable,
+            'product_quantity' => (int) $product->product_quantity,
+            'shelf_location' => $product->shelf_location,
             'created_at' => $product->created_at,
             'designs' => $designs,
             'qualities' => $qualities,

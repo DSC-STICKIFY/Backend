@@ -28,6 +28,7 @@ class UpdateProductRequest extends FormRequest
             'glossy_price' => 'nullable|numeric|min:0',
             'hologram_price' => 'nullable|numeric|min:0',
             'is_customizable' => 'nullable|boolean',
+            'shelf_location' => 'nullable|string|max:255',
         ];
     }
 }

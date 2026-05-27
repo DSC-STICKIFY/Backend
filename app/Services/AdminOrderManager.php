@@ -8,6 +8,7 @@ use App\Models\OrderDetails;
 use App\Models\OrdersPayment;
 use App\Models\ReturnRefund;
 use App\Models\ReturnRefundModel;
+use App\Models\ProductsModel;
 use Illuminate\Http\JsonResponse;
 use App\Notifications\OrderCancelled;
 use Illuminate\Http\Request;
@@ -438,6 +439,7 @@ class AdminOrderManager implements AdminOrderServices
                 $shippingFee = max(0, $originalTotalPrice - $currentSubtotalBeforeCancel);
 
                 $item->update(['status' => 'Cancelled']);
+                $this->incrementStockForDetail($item);
 
                 $activeTotal = $order->orderDetails()
                     ->where('status', '!=', 'Cancelled')
@@ -490,7 +492,13 @@ class AdminOrderManager implements AdminOrderServices
                 'cancel_reason' => $reason,
                 'refund_status' => $refundStatus
             ]);
-            $order->orderDetails()->update(['status' => 'Cancelled']);
+            
+            foreach ($order->orderDetails as $item) {
+                if ($item->status !== 'Cancelled') {
+                    $item->update(['status' => 'Cancelled']);
+                    $this->incrementStockForDetail($item);
+                }
+            }
 
             DB::commit();
 
@@ -684,6 +692,7 @@ class AdminOrderManager implements AdminOrderServices
 
             $orderDetail = $returnRequest->orderDetail;
             $orderDetail->update(['status' => 'Refunded']);
+            $this->incrementStockForDetail($orderDetail);
             $returnRequest->update(['status' => 'approved']);
             $this->syncParentOrderStatus($orderDetail->order_id);
 
@@ -818,19 +827,75 @@ class AdminOrderManager implements AdminOrderServices
                 }
                 $path = $request->file('final_design')->store('final_designs', 'public');
                 $order->update([
-                    'final_design_url' => $path,
-                    'status'           => 'Finalizing'
+                    'final_design_url'    => $path,
+                    'status'              => 'Awaiting Layout Approval',
+                    'layout_submitted_at' => now(),
                 ]);
-                $order->orderDetails()->update(['status' => 'Finalizing']);
+                $order->orderDetails()->update(['status' => 'Awaiting Layout Approval']);
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Final design uploaded.',
+                'message' => 'Final design uploaded and submitted to Sub-Admin for approval.',
                 'order'   => $order->fresh()
             ]);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Failed to upload design.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function approveLayout(int $orderId): JsonResponse
+    {
+        DB::beginTransaction();
+        try {
+            $order = OrdersModel::findOrFail($orderId);
+            
+            $order->update([
+                'status'             => 'In Production',
+                'layout_approved_at' => now(),
+            ]);
+            $order->orderDetails()->update(['status' => 'In Production']);
+
+            // Broadcast/notify staff of a new production assignment
+            try {
+                // You can add database notification or custom logs here
+            } catch (\Throwable $ex) {
+                Log::error('Staff notification failed: ' . $ex->getMessage());
+            }
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Layout approved. Order sent to production.',
+                'order'   => $order->fresh()
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function rejectLayout(Request $request, int $orderId): JsonResponse
+    {
+        $request->validate([
+            'reason' => 'required|string|max:500',
+        ]);
+
+        try {
+            $order = OrdersModel::findOrFail($orderId);
+            $order->update([
+                'status'                  => 'Design In Progress',
+                'layout_rejection_reason' => $request->input('reason'),
+            ]);
+            $order->orderDetails()->update(['status' => 'Design In Progress']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Layout design rejected and returned to artist for revisions.',
+                'order'   => $order->fresh()
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -921,6 +986,16 @@ class AdminOrderManager implements AdminOrderServices
             ]);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Failed to reject shipment.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function incrementStockForDetail(OrderDetails $detail): void
+    {
+        $product = ProductsModel::find($detail->product_id);
+        if ($product && !$product->is_customizable) {
+            $qty = $detail->quantity ?? 1;
+            $product->increment('product_quantity', $qty);
+            Log::info("Restored {$qty} items to stock for product #{$product->product_id} ('{$product->product_name}'). New stock: " . $product->product_quantity);
         }
     }
 }

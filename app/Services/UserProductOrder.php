@@ -115,13 +115,17 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             unset($orderDetails['items']);
 
             $orderDetails['order_date'] = Carbon::now()->toDateTimeString();
-            $orderDetails['status'] = 'Pending';
 
             // Check if any ordered product is customizable
             $productIds = collect($items)->pluck('product_id')->unique()->toArray();
             $hasCustomizable = ProductsModel::whereIn('product_id', $productIds)
                 ->where('is_customizable', 1)
                 ->exists();
+            
+            $paymentMethod = strtoupper($orderDetails['payment_method'] ?? '');
+            $isGcash = ($paymentMethod === 'GCASH');
+            
+            $orderDetails['status'] = $isGcash ? 'Pending Payment' : ($hasCustomizable ? 'Pending' : 'To Process');
 
             $orderDetails['cs_review_status'] = $hasCustomizable ? 'pending_admin_approval' : 'not_applicable';
             $orderDetails['staff_validation_status'] = $hasCustomizable ? 'pending_validation' : 'not_applicable';
@@ -129,6 +133,15 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             $order = OrdersModel::create($orderDetails);
 
             foreach ($items as $item) {
+                $product = ProductsModel::where('product_id', $item['product_id'])->lockForUpdate()->first();
+                if ($product && !$product->is_customizable) {
+                    $qtyRequested = $item['quantity'] ?? 1;
+                    if ($product->product_quantity < $qtyRequested) {
+                        throw new \Exception("Product '" . $product->product_name . "' is out of stock or has insufficient stock. Available: " . $product->product_quantity);
+                    }
+                    $product->decrement('product_quantity', $qtyRequested);
+                }
+
                 $order->orderDetails()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'] ?? 1,
@@ -136,7 +149,7 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                     'subtotal' => $item['subtotal'] ?? (($item['quantity'] ?? 1) * ($item['item_price'] ?? 0)),
                     'size' => $item['size'] ?? null,
                     'comments' => $item['comments'] ?? null,
-                    'status' => 'Pending',
+                    'status' => $isGcash ? 'Pending Payment' : ($hasCustomizable ? 'Pending' : 'To Process'),
                     'design_name' => $item['design_name'] ?? null,
                     'quality_name' => $item['quality_name'] ?? null,
                 ]);
