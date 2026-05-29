@@ -288,6 +288,47 @@ Route::get('/payment/failed', function () {
 
 Route::get('/settings/refund-policy', [SettingController::class, 'refundPolicy']);
 
+// ── Customization Requests (V3 Flow) ────────────────────────────────────────
+// Customer routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/customization-requests', [\App\Http\Controllers\CustomizationRequestController::class, 'store']);
+    Route::get('/customer/customization-requests', [\App\Http\Controllers\CustomizationRequestController::class, 'customerIndex']);
+    Route::get('/customer/customization-requests/{id}', [\App\Http\Controllers\CustomizationRequestController::class, 'customerShow']);
+    Route::post('/customer/customization-requests/{id}/approve-quotation', [\App\Http\Controllers\CustomizationRequestController::class, 'approveQuotation']);
+    Route::post('/customer/customization-requests/{id}/decline-quotation', [\App\Http\Controllers\CustomizationRequestController::class, 'declineQuotation']);
+    Route::post('/customer/customization-requests/{id}/respond-partial', [\App\Http\Controllers\CustomizationRequestController::class, 'customerRespondPartial']);
+    Route::post('/customer/customization-requests/{id}/request-revision', [\App\Http\Controllers\CustomizationRequestController::class, 'customerRequestRevision']);
+    Route::post('/customer/customization-requests/{id}/convert-to-order', [\App\Http\Controllers\CustomizationRequestController::class, 'convertToOrder']);
+});
+
+// Admin / CS / Artist / Staff routes
+Route::middleware('auth:artist_api,admin_api,subadmin_api,staff_api,sanctum')->group(function () {
+    Route::get('/admin/customization-requests', [\App\Http\Controllers\CustomizationRequestController::class, 'adminIndex']);
+    Route::patch('/admin/customization-requests/{id}/status', [\App\Http\Controllers\CustomizationRequestController::class, 'updateStatus']);
+    
+    // CS/Staff Feasibility
+    Route::post('/admin/customization-requests/{id}/send-to-feasibility', [\App\Http\Controllers\CustomizationRequestController::class, 'sendToFeasibility']);
+    Route::post('/admin/customization-requests/{id}/submit-feasibility', [\App\Http\Controllers\CustomizationRequestController::class, 'submitFeasibility']);
+    
+    // CS: Assign artist
+    Route::post('/admin/customization-requests/{id}/assign-artist', [\App\Http\Controllers\CustomizationRequestController::class, 'assignArtist']);
+    
+    // Artist: Submit quotation
+    Route::post('/admin/customization-requests/{id}/artist-submit-quotation', [\App\Http\Controllers\CustomizationRequestController::class, 'artistSubmitQuotation']);
+    // Artist: Mark in progress (Timeline Initialization)
+    Route::post('/admin/customization-requests/{id}/mark-in-progress', [\App\Http\Controllers\CustomizationRequestController::class, 'markInProgress']);
+    // Artist: Upload mockup
+    Route::post('/admin/customization-requests/{id}/upload-mockup', [\App\Http\Controllers\CustomizationRequestController::class, 'uploadMockup']);
+    // Artist: Finalize design & schedule production date
+    Route::post('/admin/customization-requests/{id}/finalize-design', [\App\Http\Controllers\CustomizationRequestController::class, 'finalizeDesign']);
+    
+    // Admin Design Review (Subadmin/Superadmin)
+    Route::post('/admin/customization-requests/{id}/admin-review-design', [\App\Http\Controllers\CustomizationRequestController::class, 'adminReviewDesign']);
+    
+    // Staff Quality Control (QC)
+    Route::post('/admin/customization-requests/{id}/submit-qc', [\App\Http\Controllers\CustomizationRequestController::class, 'submitQC']);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/settings',  [SettingController::class, 'index']);
     Route::post('/admin/settings', [SettingController::class, 'update']);

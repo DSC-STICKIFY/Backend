@@ -305,7 +305,8 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
             'orderDetails.product.designs',
             'user',
             'reviews',
-            'returnRefund'
+            'returnRefund',
+            'artist'
         ])->where('user_id', $user->getKey())
             ->orderBy('created_at', 'desc')
             ->get();
@@ -395,6 +396,15 @@ class UserProductOrder implements OrderInterface, ProductViewerInterface
                 'rating'               => $firstReview?->rating,
                 'comment'              => $firstReview?->comment,
                 'admin_reply'          => $firstReview?->admin_reply,
+                'artist_id'            => $order->artist_id,
+                'artist'               => $order->artist ? [
+                    'employee_id' => $order->artist->employee_id,
+                    'first_name'  => $order->artist->first_name,
+                    'last_name'   => $order->artist->last_name,
+                    'email'       => $order->artist->email,
+                ] : null,
+                'final_design_url'     => $order->final_design_url,
+                'shipment_note'        => $order->shipment_note,
             ];
         });
 

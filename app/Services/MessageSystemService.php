@@ -71,11 +71,12 @@ class MessageSystemService
     public function sendMessage(Request $request)
     {
         $validated = $request->validate([
-            'body'        => 'nullable|string|max:1000',
-            'receiver_id' => 'nullable|integer',
-            'product_id'  => 'nullable|integer',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:10240',
-            'video'       => 'nullable|file|mimes:mp4,mov,webm|max:102400',
+            'body'                     => 'nullable|string|max:1000',
+            'receiver_id'              => 'nullable|integer',
+            'product_id'               => 'nullable|integer',
+            'customization_request_id' => 'nullable|integer',
+            'image'                    => 'nullable|image|mimes:jpg,jpeg,png,gif,webp|max:10240',
+            'video'                    => 'nullable|file|mimes:mp4,mov,webm|max:102400',
         ]);
 
         $user = Auth::user();
@@ -100,9 +101,19 @@ class MessageSystemService
                 $receiverId = (int) $validated['receiver_id'];
             } else {
                 $productId = $validated['product_id'] ?? null;
+                $customizationId = $validated['customization_request_id'] ?? null;
                 $receiverId = null;
 
-                if ($productId) {
+                // Try to resolve receiver from customization request first
+                if ($customizationId) {
+                    $cr = \App\Models\CustomizationRequest::find($customizationId);
+                    if ($cr && $cr->artist_id) {
+                        $receiverId = $cr->artist_id;
+                    }
+                }
+
+                // Fallback: resolve from standard orders
+                if (!$receiverId && $productId) {
                     $order = \App\Models\OrdersModel::where('user_id', $senderId)
                         ->whereHas('orderDetails', function($q) use ($productId) {
                             $q->where('product_id', $productId);
@@ -135,15 +146,16 @@ class MessageSystemService
             : null;
 
         $message = Message::create([
-            'sender_id'   => $senderId,
-            'receiver_id' => $receiverId,
-            'product_id'  => $validated['product_id'] ?? null,
-            'body'        => $validated['body'] ?? $request->input('message'),
-            'image'       => $imagePath,
-            'video'       => $videoPath,
-            'sender_type' => $senderType,
-            'is_read'     => false,
-            'is_bot'      => $isBot,
+            'sender_id'                => $senderId,
+            'receiver_id'              => $receiverId,
+            'product_id'               => $validated['product_id'] ?? null,
+            'customization_request_id' => $validated['customization_request_id'] ?? null,
+            'body'                     => $validated['body'] ?? $request->input('message') ?? '',
+            'image'                    => $imagePath,
+            'video'                    => $videoPath,
+            'sender_type'              => $senderType,
+            'is_read'                  => false,
+            'is_bot'                   => $isBot,
         ]);
 
         Log::info('Message Sent Successfully', [
@@ -273,31 +285,40 @@ class MessageSystemService
     public function getAdminUserMessages(int $userId)
     {
         $productId = request()->query('product_id');
+        $customizationId = request()->query('customization_request_id');
         $lastId = request()->query('last_id');
 
         if ($productId === 'null' || $productId === '' || $productId === 'undefined' || $productId === '0') {
             $productId = null;
         }
+        if ($customizationId === 'null' || $customizationId === '' || $customizationId === 'undefined' || $customizationId === '0') {
+            $customizationId = null;
+        }
 
         // ✅ Include customer_service and staff as valid reply sender types
         $staffSenderTypes = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
 
-        $messages = Message::where(function ($q) use ($userId, $productId, $lastId) {
+        // When customization_request_id is provided, filter by it (isolated thread per custom request)
+        $filterByContext = function ($q) use ($productId, $customizationId) {
+            if ($customizationId) {
+                $q->where('customization_request_id', $customizationId);
+            } elseif ($productId) {
+                $q->where('product_id', $productId)->whereNull('customization_request_id');
+            } else {
+                $q->whereNull('product_id')->whereNull('customization_request_id');
+            }
+        };
+
+        $messages = Message::where(function ($q) use ($userId, $lastId, $filterByContext) {
                 $q->where('sender_id', $userId)
                   ->whereIn('sender_type', ['customer', 'user']);
-
-                if ($productId) $q->where('product_id', $productId);
-                else $q->whereNull('product_id');
-
+                $filterByContext($q);
                 if ($lastId) $q->where('id', '>', $lastId);
             })
-            ->orWhere(function ($q) use ($userId, $productId, $lastId, $staffSenderTypes) {
+            ->orWhere(function ($q) use ($userId, $lastId, $staffSenderTypes, $filterByContext) {
                 $q->where('receiver_id', $userId)
                   ->whereIn('sender_type', $staffSenderTypes);
-
-                if ($productId) $q->where('product_id', $productId);
-                else $q->whereNull('product_id');
-
+                $filterByContext($q);
                 if ($lastId) $q->where('id', '>', $lastId);
             })
             ->orderBy('created_at', 'asc')
@@ -321,31 +342,40 @@ class MessageSystemService
         $user = Auth::user();
         $userId = $this->getSenderInfo($user)['id'];
         $productId = request()->query('product_id');
+        $customizationId = request()->query('customization_request_id');
         $lastId = request()->query('last_id');
 
         if ($productId === 'null' || $productId === '' || $productId === 'undefined' || $productId === '0') {
             $productId = null;
         }
+        if ($customizationId === 'null' || $customizationId === '' || $customizationId === 'undefined' || $customizationId === '0') {
+            $customizationId = null;
+        }
 
         // ✅ Customer sees replies from all staff types including customer_service
         $staffSenderTypes = ['admin', 'subadmin', 'artist', 'staff', 'customer_service'];
 
-        $messages = Message::where(function ($q) use ($userId, $productId, $lastId) {
+        // When customization_request_id is provided, filter by it (isolated thread per custom request)
+        $filterByContext = function ($q) use ($productId, $customizationId) {
+            if ($customizationId) {
+                $q->where('customization_request_id', $customizationId);
+            } elseif ($productId) {
+                $q->where('product_id', $productId)->whereNull('customization_request_id');
+            } else {
+                $q->whereNull('product_id')->whereNull('customization_request_id');
+            }
+        };
+
+        $messages = Message::where(function ($q) use ($userId, $lastId, $filterByContext) {
                 $q->where('sender_id', $userId)
                   ->whereIn('sender_type', ['customer', 'user']);
-
-                if ($productId) $q->where('product_id', $productId);
-                else $q->whereNull('product_id');
-
+                $filterByContext($q);
                 if ($lastId) $q->where('id', '>', $lastId);
             })
-            ->orWhere(function ($q) use ($userId, $productId, $lastId, $staffSenderTypes) {
+            ->orWhere(function ($q) use ($userId, $lastId, $staffSenderTypes, $filterByContext) {
                 $q->where('receiver_id', $userId)
                   ->whereIn('sender_type', $staffSenderTypes);
-
-                if ($productId) $q->where('product_id', $productId);
-                else $q->whereNull('product_id');
-
+                $filterByContext($q);
                 if ($lastId) $q->where('id', '>', $lastId);
             })
             ->orderBy('created_at', 'asc')

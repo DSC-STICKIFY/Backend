@@ -14,6 +14,7 @@ class Message extends Model
         'sender_id',
         'receiver_id',
         'product_id',
+        'customization_request_id',
         'body',
         'image',
         'video',     
